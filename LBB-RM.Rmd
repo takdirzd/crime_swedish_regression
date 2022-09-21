@@ -1,0 +1,385 @@
+---
+title: "Crime in Swedish"
+author: "Takdir Zulhaq Dessiaming"
+date: "2022-08-15"
+output:
+  html_document:
+    theme: cosmo
+    highlight: breezedark
+    toc: true
+    toc_float:
+      collapsed: true
+    df_print: paged
+---
+Swedish crime statistics from 1950 to 2015
+
+This data set contains statistics on reported crimes in Sweden (by 100.000) from 1950 to 2015. It contains the following columns:
+
+    crimes.total: total number of reported crimes
+    crimes.penal.code: total number of reported crimes against the criminal code
+    crimes.person: total number of reported crimes against a person
+    murder: total number of reported murder
+    sexual.offences: total number of reported sexual offences
+    rape: total number of reported rapes
+    assault: total number of reported aggravated assaults
+    stealing.general: total number of reported crimes involving stealing or robbery
+    robbery: total number of reported armed robberies
+    burglary: total number of reported armed burglaries
+    vehicle.theft: total number of reported vehicle thefts
+    house.theft: total number of reported theft inside a house
+    shop.theft: total number of reported theft inside a shop
+    out.of.vehicle.theft: total number of reported theft from a vehicle
+    criminal.damage: total number of reported criminal damages
+    other.penal.crimes: number of other penal crime offenses
+    fraud: total number of reported frauds
+    narcotics: total number of reported narcotics abuses
+    drunk.driving: total number of reported drunk driving incidents
+    Year: the year
+    population: the total estimated population of Sweden at the time
+
+Using this dataset, We will develop a model with using linear reggression analysis to predict our target, that is crimes.total. 
+
+# Library
+
+```{r}
+library(MLmetrics)
+library(dplyr)
+library(lmtest)
+library(GGally)
+library(ggplot2)
+```
+
+# Read Data
+
+```{r}
+df <-  read.csv("reported.csv")
+df
+```
+
+# Pre-Processing Data
+
+## Check Data Type
+```{r}
+str(df)
+colSums(is.na(df))
+```
+As we can see, there are many columns that contains NA value. For that, we just delete it, as we don't need those in our analysis.
+
+## Data Cleaning
+
+```{r}
+df <-  df %>% 
+  select(-c(house.theft, vehicle.theft, out.of.vehicle.theft,shop.theft, narcotics))
+  
+# str(df)
+# anyNA(df)
+```
+
+# Analysis
+## Correlation visualization
+
+```{r}
+ggcorr(data = df,  hjust = 1, layout.exp = 3, label = T)
+```
+We can see the correlation above between columns, ranging from no correlation to strong correlation. For our analysis, we can use some columns to predict crimes.total, we just see the columns that good correlation with crimes.total. We can use all those columns as predictor, or we can use some of them, let's pick = `murder` , `sexual.offenses` , `burglary` + `fraud` and `drunk.driving`.
+```{r}
+boxplot(df$crimes.total)
+```
+
+```{r}
+boxplot(df$drunk.driving)
+```
+  
+Good, looks like there is no outlier!   
+
+#Correlation
+
+## Cor.test()
+
+To test our predictor, we have to make sure that the target and the predictor have a significant correlation.
+
+* H0: Correlation Not Significant (correlation = 0)    
+* H1: Correlation Significant (correlation != 0)   
+* Result we want = H1
+
+```{r}
+cor.test(df$crimes.total, df$drunk.driving)
+```
+And we have H1, as the result we want. That's good.
+
+# Modelling
+
+Now in modelling step, we use lm() function to make a model, it's contain the target, and the predictor.
+
+```{r}
+model_base <-  lm(formula = crimes.total ~ drunk.driving, data = df)
+summary(model_base)
+```
+
+## 1 Predictor
+
+```{r}
+plot(x= df$drunk.driving, y = df$crimes.total)
+abline(model_base, col="red")
+```
+
+Insight :
+
+* When crimes.total increases by one unit, drunk.driving increases by 46,637 points, with the other predictor values remaining the same.     
+* R-squared from model_base, standart, that is 0.5367, not high.    
+
+## Many Predictor
+
+Let's try use some columns as predictor, as we choose above.
+
+```{r}
+model_multi <-  lm(formula = crimes.total ~ murder + sexual.offenses + burglary + fraud + drunk.driving, data = df)
+summary(model_multi)
+```
+Insight :
+
+* When crimes.total increases by one unit, burglary increases by 6.3485 points, with the other predictor values remaining the same.    
+* If we use multiple predictor, then we see the Adjusted R-squared from model_multi, is very good, that is 0.9512, better than model_base.    
+* There is star in the side part of the predictor, that means, that the predictor is significant, which is good to build a model to predict.    
+
+## All Predictor
+
+Then we try use all columns as predictor.
+
+```{r}
+model_all <-  lm(formula = crimes.total ~ . , data = df)
+summary(model_all)
+```
+Insight :  
+
+* When crimes.total increases by one unit, robbery increases by 1.029e+00 points, with the other predictor values remaining the same.    
+* The Adjusted R-squared from model_all, is very good, that is 1.   
+
+## R-Squared Comparison
+
+```{r}
+summary(model_base)$r.squared
+summary(model_multi)$adj.r.squared
+summary(model_all)$adj.r.squared
+```
+
+Insight :  
+
+* What we have here is R-squared number. What we want is R-squared that near to 1.    
+* Which is, it's good to build a model with R-squared near to 1.    
+* model_multi and model_all have very good R-squared, that we will choose these have to continue the analysis.    
+
+# Predicting
+
+Now we have to predict our data, using the model we have before, with predict() function.
+
+```{r}
+
+pred_crime <-  predict(object = model_base , newdata = df)   
+pred_crime_multi <-   predict(object = model_multi , newdata = df) 
+pred_crime_all <-  predict(object = model_all , newdata = df) 
+```
+
+## RMSE (Root Mean Squared Error)
+
+Before continue, let's see the error that can be generated from predict above!
+
+```{r}
+RMSE(y_pred = pred_crime , y_true = df$crimes.total)
+RMSE(y_pred = pred_crime_multi , y_true = df$crimes.total)
+RMSE(y_pred = pred_crime_all , y_true = df$crimes.total)
+```
+Insight :   
+
+* As the name as error, we want the smallest possible number.   
+* Because if the error is big, than our predict is bad to predict our data.   
+* In this case, predict with model_all have good RMSE.    
+
+
+# Step-wise Regression for Feature Selection
+
+Is the predict with model_all is the best choice to predict our model? not necessarily. So there is step called Step-wise Regression, to help us choose what the best model we have.
+
+## Backward
+
+```{r}
+model_backward <-  step(object = model_all  #object diisi dengan model
+                       , direction = "backward", #menggunakan backward
+                       trace = F) #memilih untuk tidak melihat prosesnya
+summary(model_backward)
+```
+
+Insight :  
+
+* With Backward Step, we make a calculation with model_all as our object. This step Backward calculate which predictor should be discarded, that make the information loss very high.    
+* The Summary above showing, with Backward step, that are the model with best predictor it has.   
+
+# Prediction Interval
+
+```{r}
+pred_model_step_interval <-  predict(
+  object = model_backward,
+  newdata = df,
+  interval = "prediction",
+  level = 0.95) # 95% confidence level, tolerate 5% error
+
+head(pred_model_step_interval)
+```
+
+```{r}
+ggplot(data = df, aes(x = drunk.driving, y = crimes.total)) +
+  geom_point()+
+  geom_smooth(method = "lm", level = 0.95)+
+  labs(title = "Linear Regression of Crimes Person by Murder")+
+  theme_minimal()
+```
+
+***Confidence interval illustration for `crimes.total ~ drunk.driving`***
+
+## Model Evaluation
+
+After making predictions, let's compare the performance of the following three models:
+
+```{r}
+# r-squared
+summary(model_base)$r.squared
+summary(model_multi)$adj.r.squared
+summary(model_backward)$adj.r.squared
+```
+
+```{r}
+pred_backward <-  predict(object = model_backward , newdata = df)
+```
+
+```{r}
+# RMSE
+RMSE(y_pred = pred_crime, y_true =  df$crimes.total)
+RMSE(y_pred = pred_crime_multi, y_true =  df$crimes.total)
+RMSE(y_pred = pred_backward, y_true =  df$crimes.total)
+```
+
+**Conclusion**    
+  
+* Best model based on R-squared is model_backward   
+* Best model based on RMSE is model_backward    
+
+**What model we have to choose?**     
+
+* In this case, we will chose model_backward, because it's already have significant predictor, and minimal error    
+
+# Assumption
+
+As we want our predictor is good to predict the data, the best step is we dont want assumption in our predcitor. Then let's continue our analysis.   
+
+As a comparison, let's compare model_multi, and model_backward.
+
+## Normality of Residuals 
+
+The linear regression model is expected to produce **errors that are normally distributed**. That way, more errors cluster around the number zero.
+
+### Visualization of residual histogram using `hist()` . function
+
+```{r}
+hist(model_multi$residuals)
+hist(model_backward$residuals)
+```
+
+Insight : 
+
+* Both have normal distribution of residual, we can see the data gathered to 0.   
+
+### Statistic test with `shapiro.test()`
+
+Shapiro-Wilk hypothesis test:
+
+* H0: normal distribution error
+* H1: NOT normal distribution error
+
+* if p-value > 0.05, accept H0
+
+> Result we want : H0
+
+```{r}
+# shapiro test dari residual
+shapiro.test(model_backward$residuals)
+shapiro.test(model_multi$residuals)
+```
+
+Insight :   
+  
+* Both have normal distribution of residual, we can see both p-value > 0.05.    
+
+## Homoscedasticity of Residuals
+
+It is expected that the error generated by the model spreads randomly or with constant variation. When visualized, the error is not patterned. This condition is also known as **homoscedasticity**
+
+### Visualization with scatter plot: `fitted.values` vs `residuals`
+
+* `fitted.values` adalah nilai hasil prediksi data training
+* `residuals` adalah nilai error
+
+```{r}
+# scatter plot
+plot(x = model_all$fitted.values, y = model_all$residuals)
+abline(h = 0, col = "red") # garis horizontal di angka 0
+
+plot(x = model_all$fitted.values, y = model_multi$residuals)
+abline(h = 0, col = "red") # garis horizontal di angka 0
+
+```
+
+
+### Statistic test with `bptest()` from `lmtest` package.
+
+Breusch-Pagan hypothesis test:
+
+* H0: constant spread error or homoscedasticity
+* H1: constant NOT spread error or heteroscedasticity
+
+> Result we want: H0
+
+```{r}
+# bptest dari model
+library(lmtest)
+bptest(model_multi)
+bptest(model_backward)
+```
+
+Insight :   
+
+* Model_multi have constant spread error.   
+* Model_backward have error doesn't spread constant.    
+* Thats mean model_backward have failed in this assumption test.    
+
+
+## No Multicollinearity
+
+
+Multicollinearity is a condition where there is a **strong correlation between predictors**. This is not desirable because it indicates a redundant predictor in the model, which should be able to choose only one of the variables with a very strong relationship. It is hoped that **multicollinearity will not occur**
+
+Test the VIF (Variance Inflation Factor) with the `vif()` function from the `car` package:
+
+* VIF value > 10: multicollinearity occurs in the model
+* VIF value < 10: there is no multicollinearity in the model
+
+> Result we want: VIF < 10
+
+```{r}
+# vif dari model
+library(car)
+vif(model_multi)
+vif(model_backward)
+```
+
+Insight : 
+
+* Model_multi have there is no multicollinearity in the model.    
+* Model_backward have multicollinearity occurs in the model.    
+* We can see that model_multi have VIF < 10, and model_backward have VIF > 10 in all predictor, except drunk.driving.   
+* Thats mean model_backward have failed in this assumption test.    
+
+# Conclusion 
+
+So after our analysis, ranging from EDA, Modelling, Predciting, and Assumption test, we can conclude, that in the end, the model we have to choose is `model_multi`. Even the RMSE is bigger than the `model_backward`, but is better than if our model have assumption in it. We don't want assumption in our model, because it's bad for predicting our data.
+
+
